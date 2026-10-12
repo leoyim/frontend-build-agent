@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>前端打包构建学习助手</title>
+
+<!--
+  这是一个兼容入口，不是应用的副本。
+
+  背景：GitHub Pages 一旦给仓库配上自定义域名，URL 里的「仓库名」那一段就没有了 ——
+  站点服务在域名根上（本账号里 ebook.leoyim.cn 就是这个形态）。
+  所以应用的规范地址是 https://app.leoyim.cn/ 。
+
+  但需求里写的地址是 app.leoyim.cn/frontend-build-agent，这个文件让那个地址
+  也能打开应用：它只做一次跳转，真正的应用始终只有一份，在站点根目录。
+  若不需要这个别名，删掉整个 frontend-build-agent/ 目录即可，应用不受影响。
+
+  用 meta refresh 而不是 JS 跳转：这样禁用 JS 或脚本加载失败时也能正常跳过去。
+-->
+<meta http-equiv="refresh" content="0; url=../" />
+<link rel="canonical" href="https://app.leoyim.cn/" />
+<meta name="robots" content="noindex" />
+</head>
+<body>
+  <p>正在前往 <a href="../">前端打包构建学习助手</a>…</p>
+</body>
+</html>

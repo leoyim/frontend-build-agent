@@ -45,6 +45,23 @@ jobs:
           test -f public/knowledge.json
           echo "public/ 文件齐备：$(ls public | tr '\n' ' ')"
 
+      # CNAME 丢了不会报错，只会让站点悄悄退回 leoyim.github.io/<repo> 的地址，
+      # 而且自定义域名的 HTTPS 证书也会跟着失效。所以在这里挡一道。
+      - name: 自定义域名声明必须在
+        run: |
+          test -f public/CNAME || { echo "::error::public/CNAME 缺失，站点会退回默认地址"; exit 1; }
+          echo "CNAME: $(cat public/CNAME)"
+
+      # 相对路径是子路径部署的前提。绝对路径（以 / 开头）在本部署形态下
+      # 会指向域名根而不是应用目录，页面能开、但样式和脚本会 404。
+      - name: 静态资源必须用相对路径
+        run: |
+          if grep -nE '(src|href)="/' public/index.html; then
+            echo "::error::public/index.html 里出现以 / 开头的绝对路径，子路径下会 404"
+            exit 1
+          fi
+          echo "资源引用均为相对路径"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
