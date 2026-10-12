@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * 把 knowledge/ 下的 Markdown 预处理成 public/knowledge.json。
+ * 把 knowledge/ 下的 Markdown 预处理成
+ * public/frontend-build-agent/knowledge.json。
  *
  * 为什么要有这一步，而不是让两端各自读 Markdown：
  * 服务端有 fs，浏览器没有 —— 浏览器只能读一份提前准备好的数据。
@@ -8,17 +9,23 @@
  * 同一个问题在本地跑和部署到 Pages 上会检索到不同资料。
  * 所以分块只在这里做一次，产物由两端共用。
  *
- * 分块规则本身来自 public/core.js，不是这个脚本自定义的。
+ * 分块规则本身来自共用内核 public/frontend-build-agent/core.js，
+ * 不是这个脚本自定义的。
  */
 'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
-const core = require('../public/core.js');
 
 const ROOT = path.join(__dirname, '..');
+// 应用在 public/ 下的子目录。线上与本地共用这一层：应用地址是
+// /frontend-build-agent/，站点根只放一个跳转页。
+const APP_DIR = path.join('public', 'frontend-build-agent');
 const KB_DIR = process.env.KNOWLEDGE_DIR || path.join(ROOT, 'knowledge');
-const OUT = path.join(ROOT, 'public', 'knowledge.json');
+const OUT = path.join(ROOT, APP_DIR, 'knowledge.json');
+
+// 内核路径跟着应用目录走，免得同一个目录名在文件里出现两遍
+const core = require(path.join(ROOT, APP_DIR, 'core.js'));
 
 const chunks = [];
 
@@ -48,7 +55,8 @@ if (!chunks.length) {
 const json = JSON.stringify(chunks);
 fs.writeFileSync(OUT, json, 'utf8');
 
-console.log('已生成 public/knowledge.json');
+// 用相对路径回显，脚本改了目录也不用跟着改字面量
+console.log('已生成 ' + path.relative(ROOT, OUT).replace(/\\/g, '/'));
 console.log('  来源   ' + KB_DIR);
 console.log('  片段   ' + chunks.length + ' 个');
 console.log('  体积   ' + (json.length / 1024).toFixed(0) + ' KB');

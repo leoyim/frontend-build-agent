@@ -1,27 +1,199 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f4fb" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0b12" />
 <title>前端打包构建学习助手</title>
-
-<!--
-  这是一个兼容入口，不是应用的副本。
-
-  背景：GitHub Pages 一旦给仓库配上自定义域名，URL 里的「仓库名」那一段就没有了 ——
-  站点服务在域名根上（本账号里 ebook.leoyim.cn 就是这个形态）。
-  所以应用的规范地址是 https://app.leoyim.cn/ 。
-
-  但需求里写的地址是 app.leoyim.cn/frontend-build-agent，这个文件让那个地址
-  也能打开应用：它只做一次跳转，真正的应用始终只有一份，在站点根目录。
-  若不需要这个别名，删掉整个 frontend-build-agent/ 目录即可，应用不受影响。
-
-  用 meta refresh 而不是 JS 跳转：这样禁用 JS 或脚本加载失败时也能正常跳过去。
--->
-<meta http-equiv="refresh" content="0; url=../" />
-<link rel="canonical" href="https://app.leoyim.cn/" />
-<meta name="robots" content="noindex" />
+<link rel="stylesheet" href="styles.css" />
+<!-- 标签页图标与侧栏品牌位共用同一个文件。两处各画一份的代价是迟早有一天它们会对不上 -->
+<link rel="icon" href="logo.svg" type="image/svg+xml" />
 </head>
 <body>
-  <p>正在前往 <a href="../">前端打包构建学习助手</a>…</p>
+
+<div id="app">
+
+  <!-- ══════════════ 侧栏：状态外置的可见形态 ══════════════ -->
+  <aside id="sidebar" aria-label="学习进度与课程结构">
+    <div class="brand">
+      <!-- 标记底色在 logo.svg 里，不靠 CSS 渐变：favicon 读不到 CSS 变量 -->
+      <div class="brand-mark"><img src="logo.svg" alt="" width="34" height="34" /></div>
+      <div>
+        <div class="brand-name">前端打包构建学习助手</div>
+        <div class="brand-sub">零基础也能懂 · 一节一练</div>
+      </div>
+    </div>
+
+    <!-- 进度 -->
+    <section class="panel">
+      <div class="panel-head">
+        <span>学习进度</span>
+        <span id="progress-fraction" class="mono">0 / 22</span>
+      </div>
+      <div class="bar" id="progress-track" role="progressbar"
+           aria-label="学习进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="progress-bar" class="bar-fill"></div>
+      </div>
+      <div class="panel-foot">
+        <span id="progress-percent" class="mono">0%</span>
+        <span id="progress-formula" class="dim"></span>
+      </div>
+      <!-- 刻意不做成 live region：它每轮对话都会重算，做成播报区会一直念 -->
+      <div id="progress-cheer" class="cheer"></div>
+    </section>
+
+    <!-- 课程清单 -->
+    <section class="panel grow">
+      <div class="panel-head"><span>课程结构</span><span class="dim mono" id="course-count"></span></div>
+      <div id="course-list" class="course-list"></div>
+    </section>
+
+    <!-- 待作答 / 待确认 -->
+    <section class="panel" id="pending-panel">
+      <div class="panel-head"><span>待办</span></div>
+      <div id="pending-body" class="pending-body dim">暂无</div>
+    </section>
+
+    <!-- 学习者画像 -->
+    <section class="panel">
+      <div class="panel-head">
+        <span>学习者画像</span>
+        <span class="dim mono" id="profile-count">0</span>
+      </div>
+      <div id="profile-body" class="profile-body dim">由使用过程累积，不预置。</div>
+    </section>
+
+    <div class="sidebar-foot">
+      <button id="btn-reset" class="btn ghost tiny" type="button">重置学习状态</button>
+    </div>
+  </aside>
+
+  <div id="nav-backdrop" class="nav-backdrop" hidden></div>
+
+  <!-- ══════════════ 主区 ══════════════ -->
+  <main id="main">
+    <header id="topbar">
+      <div class="topbar-left">
+        <button id="btn-nav" class="btn ghost icon-only only-narrow" type="button"
+                aria-label="打开课程与进度" aria-expanded="false" aria-controls="sidebar">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"
+               fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="2.2" y="3.2" width="15.6" height="13.6" rx="3.4"/>
+            <path d="M7.6 3.2v13.6"/>
+          </svg>
+        </button>
+        <span id="status-dot" class="dot" aria-hidden="true"></span>
+        <span id="status-text" role="status" aria-live="polite">正在连接…</span>
+      </div>
+      <div class="topbar-right">
+        <span id="kb-info" class="dim tiny"></span>
+        <button id="btn-guide" class="btn ghost" type="button">使用说明</button>
+        <button id="btn-settings" class="btn ghost" type="button">模型设置</button>
+      </div>
+    </header>
+
+    <div id="messages" aria-label="对话记录"></div>
+
+    <div id="composer-wrap">
+      <div id="quick-prompts"></div>
+      <form id="composer">
+        <!-- 占位文字保持一行能放下的长度：窄屏上更长的提示会被输入框裁掉，
+             而「开始第 1 节」这个例子本来就在上面的快捷短语里 -->
+        <textarea id="input" rows="1" aria-label="输入你的作答或问题" enterkeyhint="send"
+                  placeholder="写下你的答案或问题…"></textarea>
+        <button id="btn-send" type="submit" class="btn primary">发送</button>
+      </form>
+      <div class="composer-hint dim tiny">
+        学习进度与对话记录都会自动保存，刷新或关掉浏览器都不会丢。
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══════════════ 模型设置 ══════════════ -->
+<dialog id="settings" aria-labelledby="settings-title">
+  <form id="settings-form" method="dialog">
+    <h2 id="settings-title">模型设置</h2>
+    <p class="dim tiny" id="settings-server-note">
+      应用走 OpenAI 兼容接口。填自己的服务地址与密钥，或指向本地 Ollama（<code>http://localhost:11434/v1</code>，密钥留空）。
+      密钥只存在服务端 <code>data/config.json</code>，不会下发到浏览器。
+    </p>
+    <!-- 静态形态下上面那段说法不成立（根本没有服务端），换成这一段 -->
+    <p class="dim tiny" id="settings-local-note" hidden>
+      当前是<strong>静态部署</strong>（没有服务端）。密钥只保存在<strong>你自己的浏览器</strong>里，
+      由浏览器直接发往上面的模型服务，本站不持有也不转发任何密钥。
+      <br />换浏览器或清除站点数据后需要重新填写；请使用权限受限的 Key。
+    </p>
+
+    <label>
+      <span>API 地址（Base URL）</span>
+      <input id="cfg-baseUrl" type="text" placeholder="https://api.example.com/v1" autocomplete="off" />
+    </label>
+    <div class="preset-row" id="presets"></div>
+
+    <label>
+      <span>模型名</span>
+      <input id="cfg-model" type="text" placeholder="例如 deepseek-chat / gpt-4o-mini / qwen2.5:7b" autocomplete="off" />
+    </label>
+
+    <label>
+      <span>API Key<span class="dim tiny" id="key-state"></span></span>
+      <input id="cfg-apiKey" type="password" placeholder="留空表示不修改" autocomplete="off" />
+    </label>
+
+    <div class="grid2">
+      <label><span>温度</span><input id="cfg-temperature" type="number" step="any" min="0" max="2" /></label>
+      <label><span>最大 tokens</span><input id="cfg-maxTokens" type="number" step="1" min="1" max="32000" /></label>
+    </div>
+
+    <div id="settings-msg" class="settings-msg" role="status" aria-live="polite"></div>
+
+    <div class="dialog-actions">
+      <button type="button" id="btn-test" class="btn ghost">测试连通性</button>
+      <button type="button" id="btn-cancel" class="btn ghost">取消</button>
+      <button type="submit" class="btn primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ══════════════ 使用说明（新手引导） ══════════════ -->
+<dialog id="guide" aria-labelledby="guide-title">
+  <div id="guide-body">
+    <h2 id="guide-title">怎么用这个助手？</h2>
+    <p class="dim tiny">
+      它是你的私人老师，一次只讲一节，讲完会出题。答完题、听完成绩、你说「没疑问」，这一节才算学会。
+    </p>
+
+    <!-- role="list" 必须显式写：Safari + VoiceOver 会把 list-style:none 的列表从
+         可访问性树里摘掉，「这是三步」就念不出来了 -->
+    <ol class="guide-steps" role="list">
+      <li><b>第 1 步 · 配置模型</b><span>点右上角「模型设置」，选一个预设（比如 DeepSeek）填上密钥，保存后点「测试连通性」。</span></li>
+      <li><b>第 2 步 · 跟着学</b><span>点「开始第 1 节」。老师会讲解、配流程图和对比表格，然后问你 1~2 个问题。</span></li>
+      <li><b>第 3 步 · 答题确认</b><span>用自己的话作答，看批改；没有疑问就回「没有疑问」，然后说「下一节」继续。</span></li>
+    </ol>
+
+    <div class="guide-tip">
+      <b>小提示</b>
+      <span>左侧「课程结构」里点任意一节，就能让老师直接讲那一节；「学习进度」会一直记着，关掉页面也不会丢。</span>
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" id="btn-guide-close" class="btn ghost">先看看</button>
+      <button type="button" id="btn-guide-start" class="btn primary">知道了，开始学</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 礼花 / 烟花画布：不拦截鼠标事件，只负责庆祝 -->
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<!-- 顺序不能乱：内核 -> 静态后端 -> 应用。静态后端依赖内核导出的 FBCore -->
+<script src="core.js"></script>
+<script src="client-backend.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

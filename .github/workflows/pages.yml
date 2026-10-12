@@ -39,11 +39,14 @@ jobs:
 
       - name: 静态站点自检
         run: |
-          test -f public/index.html
-          test -f public/core.js
-          test -f public/client-backend.js
-          test -f public/knowledge.json
-          echo "public/ 文件齐备：$(ls public | tr '\n' ' ')"
+          APP=public/frontend-build-agent
+          test -f public/index.html          # 站点根：跳转页
+          test -f "$APP/index.html"          # 应用本体
+          test -f "$APP/core.js"
+          test -f "$APP/client-backend.js"
+          test -f "$APP/knowledge.json"
+          echo "站点根：  $(ls public | tr '\n' ' ')"
+          echo "应用目录：$(ls $APP | tr '\n' ' ')"
 
       # CNAME 丢了不会报错，只会让站点悄悄退回 leoyim.github.io/<repo> 的地址，
       # 而且自定义域名的 HTTPS 证书也会跟着失效。所以在这里挡一道。
@@ -52,12 +55,21 @@ jobs:
           test -f public/CNAME || { echo "::error::public/CNAME 缺失，站点会退回默认地址"; exit 1; }
           echo "CNAME: $(cat public/CNAME)"
 
+      # 站点根的跳转目标必须与应用的目录名一致。改了目录名却忘了改跳转页
+      # （或反过来），得到的是「能打开但进不去应用」的站点，而且不会有任何报错。
+      - name: 站点根跳转必须指向应用目录
+        run: |
+          grep -q 'url=\./frontend-build-agent/' public/index.html \
+            || { echo "::error::public/index.html 的跳转目标不是 ./frontend-build-agent/"; exit 1; }
+          echo "跳转目标正确"
+
       # 相对路径是子路径部署的前提。绝对路径（以 / 开头）在本部署形态下
       # 会指向域名根而不是应用目录，页面能开、但样式和脚本会 404。
-      - name: 静态资源必须用相对路径
+      - name: 应用静态资源必须用相对路径
         run: |
-          if grep -nE '(src|href)="/' public/index.html; then
-            echo "::error::public/index.html 里出现以 / 开头的绝对路径，子路径下会 404"
+          APP=public/frontend-build-agent
+          if grep -nE '(src|href)="/' "$APP/index.html"; then
+            echo "::error::$APP/index.html 里出现以 / 开头的绝对路径，子路径下会 404"
             exit 1
           fi
           echo "资源引用均为相对路径"

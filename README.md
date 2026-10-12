@@ -52,15 +52,28 @@ node server.js
 frontend-build-tutor-app/
 ├── knowledge/             ← 语料源（26 个 Markdown，来自《前端打包构建》）
 ├── public/                ← 这整个目录就是静态站点，能直接托管
-│   ├── index.html
-│   ├── core.js            ← Node 与浏览器共用的内核
-│   ├── client-backend.js  ← 静态形态的后端（浏览器内）
-│   ├── app.js
-│   ├── knowledge.json     ← 由 knowledge/ 生成，两端共用
-│   └── ...
+│   ├── index.html         ← 站点根：一个跳转页
+│   ├── CNAME              ← 自定义域名 app.leoyim.cn
+│   └── frontend-build-agent/   ← 应用本体住在这里
+│       ├── index.html
+│       ├── core.js        ← Node 与浏览器共用的内核
+│       ├── client-backend.js  ← 静态形态的后端（浏览器内）
+│       ├── app.js
+│       ├── knowledge.json ← 由 knowledge/ 生成，两端共用
+│       └── ...
 ├── tools/build-knowledge.js
 └── server.js              ← 服务端形态；只在用它时才有后端
 ```
+
+**为什么应用要下沉一层。** 线上地址是 `app.leoyim.cn/frontend-build-agent/`。
+GitHub Pages 一旦给仓库配上自定义域名，URL 里的「仓库名」那一段就会消失、站点整体
+平移到域名根 —— 没法既用自定义域名、又靠 Pages 自动得到这条路径。所以把路径做成
+真实的目录结构：应用住在 `frontend-build-agent/` 里，站点根只放一个跳转页。
+
+代价是路径在几个地方被硬编码，改目录名时要一起改：`tools/build-knowledge.js`（输出位置）、
+`server.js`（`APP_DIR` 常量、静态目录、知识库文件、`/api` 前缀）、两个 workflow 的自检断言。
+`APP_DIR` 在 `server.js` 里是常量，本地服务的路由也跟着它走 —— 这样本地与线上形态一致，
+「子路径下相对路径探测后端」这类只在线上才暴露的问题，本地同样会碰到。
 
 早先这里是「就地读取同级的 `frontend-build-learning-book/`」，理由是不复制、避免双份真相。
 但那个方案有个前提：应用必须和电子书并排放着。**一旦要部署到服务器、只带走应用本身，
@@ -79,17 +92,18 @@ frontend-build-tutor-app/
 浏览器读不了目录，只能读一份提前准备好的数据。所以分块不在运行时做，而是构建时做一次：
 
 ```bash
-npm run build:knowledge   # knowledge/*.md -> public/knowledge.json
+npm run build:knowledge   # knowledge/*.md -> public/frontend-build-agent/knowledge.json
 ```
 
 **服务端也读这份生成物**，不是自己遍历 `knowledge/`。这是刻意的：如果两端各有一套
 「遍历目录 + 过滤 + 按标题分块」的规则，它们迟早会分叉，之后同一个问题在本地跑和
 部署到 Pages 上会检索到不同资料，而两边都不会报错。分块规则的唯一实现在
-`public/core.js` 的 `chunkMarkdown()`，构建脚本调的就是它。
+`public/frontend-build-agent/core.js` 的 `chunkMarkdown()`，构建脚本调的就是它。
 
 代价是引入了一个构建步骤。为了不让它变成隐性陷阱：
 
-- 启动时会打印告警，如果 `knowledge/` 里的 Markdown 比 `public/knowledge.json` 新
+- 启动时会打印告警，如果 `knowledge/` 里的 Markdown 比生成物
+  `public/frontend-build-agent/knowledge.json` 新
 - CI 会重新生成一遍并 `git diff`，不一致直接失败
 
 启动日志会打印实际使用的目录和分块数；`GET /api/health` 也会返回 `knowledgeChunks`。
@@ -107,10 +121,12 @@ npm run build:knowledge   # knowledge/*.md -> public/knowledge.json
 
 | 探测结果 | 走哪个后端 | 密钥在哪 | 状态存在哪 | 语料从哪读 |
 |---|---|---|---|---|
-| 200 + JSON | `server.js` 的 `/api/*` | 服务端文件 / 环境变量 | `data/*.json` | `knowledge/`（经 `public/knowledge.json`） |
-| 404 | `public/client-backend.js` | **使用者的浏览器** localStorage | localStorage | `public/knowledge.json` |
+| 200 + JSON | `server.js` 的 `/api/*` | 服务端文件 / 环境变量 | `data/*.json` | `knowledge/`（经生成物） |
+| 404 | `client-backend.js`（浏览器内） | **使用者的浏览器** localStorage | localStorage | `public/frontend-build-agent/knowledge.json` |
 
-除了存储介质，两边跑的是**同一份内核**（`public/core.js`）：课程结构、状态补丁、
+探测用的是相对路径 `api/bootstrap`，所以在 `/frontend-build-agent/` 这类子路径下同样成立
+（服务端会把该子路径下的 `/api/*` 一并接住）。除了存储介质，两边跑的是**同一份内核**
+（`public/frontend-build-agent/core.js`）：课程结构、状态补丁、
 BM25 检索、系统提示词、模型调用。这是刻意的 —— 如果各写一份，同一个问题在本地跑和
 部署在 Pages 上会得到不同结果，而且不会报错。
 
@@ -120,10 +136,13 @@ Pages 只能托管静态文件，没有进程、没有服务端语言、没有�
 所以它跑的是上表第二行那个形态，`.github/workflows/pages.yml` 已经把这件事做好了：
 
 1. 仓库 Settings → Pages → Source 选 **GitHub Actions**
-2. push 到 `main`，工作流会：校验语料生成物是最新的 → 检查 `public/` 文件齐备 →
-   把 `public/` 作为产物发布
+2. push 到 `main`，工作流会：校验语料生成物是最新的 → 检查应用文件齐备、站点根跳转目标正确、
+   资源引用都是相对路径 → 把 `public/` 作为产物发布
 
-部署完访问 `https://<用户名>.github.io/<仓库名>/`。
+本项目配了自定义域名 `app.leoyim.cn`（产物里的 `public/CNAME`），应用地址是
+`https://app.leoyim.cn/frontend-build-agent/`。不配自定义域名时则是
+`https://<用户名>.github.io/<仓库名>/frontend-build-agent/`，站点根会跳转到它。
+
 首次打开会提示配置模型 —— 填自己的 API Key，它只存在**你自己的浏览器**里，
 由浏览器直接发往模型服务，站点本身不持有也不转发任何密钥。
 
@@ -231,7 +250,7 @@ BM25 用饱和式长度归一化（`k1=1.2`、`b=0.75`），短片段占不到�
 
 ### 4. 庆祝动效挂在「新增完成节」上，不挂在渲染上
 
-`public/app.js` 里有一个 `FX` 粒子引擎（canvas，单个合成层，不参与布局与命中测试）：
+`public/frontend-build-agent/app.js` 里有一个 `FX` 粒子引擎（canvas，单个合成层，不参与布局与命中测试）：
 
 | 触发条件 | 动效 |
 |---|---|
@@ -247,7 +266,7 @@ BM25 用饱和式长度归一化（`k1=1.2`、`b=0.75`），短片段占不到�
 
 ### 5. 应用标记：一个立方体，和它否掉的三版
 
-标记文件是 `public/logo.svg`，**侧栏品牌位和标签页图标共用这一个文件**。
+标记文件是 `public/frontend-build-agent/logo.svg`，**侧栏品牌位和标签页图标共用这一个文件**。
 以前图标是一段写死在 `index.html` 里的 data URI，两处各画一份，迟早有一天会对不上。
 
 图形是一个等距立方体，也就是「包」—— 应用名字里的「打包」对应它；
@@ -306,11 +325,13 @@ BM25 用饱和式长度归一化（`k1=1.2`、`b=0.75`），短片段占不到�
 断言语料生成物是最新的 → 起服务 → 打 `/api/health` 并断言 `knowledgeChunks` 非 0。
 
 后两条是专门为「语料」加的，因为这两种坏法都**不会报错**：
-缺语料时应用静默退化成空检索；改了 `knowledge/` 却忘了重新生成 `public/knowledge.json`
-时，两端会继续用旧资料作答。靠人看是看不出来的。
+缺语料时应用静默退化成空检索；改了 `knowledge/` 却忘了重新生成
+`public/frontend-build-agent/knowledge.json` 时，两端会继续用旧资料作答。靠人看是看不出来的。
 
-**`.github/workflows/pages.yml`**（push 到 main）：校验语料生成物 → 检查 `public/` 文件齐备 →
-发布到 GitHub Pages。
+**`.github/workflows/pages.yml`**（push 到 main）：校验语料生成物 → 检查应用文件齐备、
+`CNAME` 在位、站点根跳转目标正确、资源都是相对路径 → 发布到 GitHub Pages。
+后两条是为「子路径部署」加的：跳转目标写错或出现绝对路径，都会得到一个能打开、
+但进不去或没有样式的站点。
 
 ---
 

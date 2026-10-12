@@ -20,6 +20,23 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const ROOT = __dirname;
+const PUBLIC_DIR = path.join(ROOT, 'public');
+
+/**
+ * 应用在 public/ 下的子目录。
+ *
+ * 静态托管（GitHub Pages）配上自定义域名后，URL 里的仓库名那一段会消失，
+ * 站点整体平移到域名根 —— 没法既用自定义域名、又靠 Pages 自动拿到
+ * /frontend-build-agent/ 这条路径。所以路径改成真实的目录结构：
+ * 应用住在 public/frontend-build-agent/，站点根只放一个跳转页。
+ *
+ * 本地服务保持同一形态（下面会把 /frontend-build-agent/api/* 也挂上），
+ * 这样「子路径下相对探测后端」这类只在线上才暴露的问题，本地就能碰到。
+ */
+const APP_DIR = 'frontend-build-agent';
+const APP_BASE = '/' + APP_DIR;
+
 /**
  * Node 与浏览器共用的内核：课程结构、状态补丁、BM25 检索、系统提示词、模型调用。
  * 之所以抽出去，是因为应用现在有两个交付形态：
@@ -27,7 +44,7 @@ const path = require('node:path');
  *   · 纯静态托管      —— 同一份 public/ 直接交给 GitHub Pages，全部逻辑在浏览器里跑
  * 逻辑只能有一份，否则改一处忘一处。
  */
-const core = require('./public/core.js');
+const core = require(path.join(ROOT, 'public', APP_DIR, 'core.js'));
 const {
   MAX_HISTORY,
   defaultState, applyPatch, extractStatePatch,
@@ -36,8 +53,6 @@ const {
   buildSystemPrompt, callLLM, publicConfig, publicState,
 } = core;
 
-const ROOT = __dirname;
-const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_DIR = path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -194,10 +209,14 @@ function llmReady() {
 
 /* ────────────────────────────── 知识库 ────────────────────────────── */
 
-const KNOWLEDGE_FILE = path.join(PUBLIC_DIR, 'knowledge.json');
+/** 项目内的绝对路径 -> 展示用的相对路径。提示语里不再手写字面量 */
+const displayPath = (p) => path.relative(ROOT, p).replace(/\\/g, '/');
+
+const KNOWLEDGE_FILE = path.join(PUBLIC_DIR, APP_DIR, 'knowledge.json');
 
 /**
- * 语料的唯一来源是 public/knowledge.json —— 由 tools/build-knowledge.js
+ * 语料的唯一来源是 public/frontend-build-agent/knowledge.json
+ * —— 由 tools/build-knowledge.js
  * 从 knowledge/ 的 Markdown 生成，服务端与浏览器读的是同一份。
  *
  * 早先服务端是自己遍历 knowledge/ 的。改成读生成物，是为了杜绝
@@ -223,10 +242,10 @@ function loadKnowledge() {
 function knowledgeWarning() {
   try {
     if (!fs.existsSync(KNOWLEDGE_FILE)) {
-      return 'public/knowledge.json 不存在 —— 请先运行 npm run build:knowledge';
+      return displayPath(KNOWLEDGE_FILE) + ' 不存在 —— 请先运行 npm run build:knowledge';
     }
     if (!loadKnowledge().chunks.length) {
-      return 'public/knowledge.json 里没有任何片段 —— 检索会永远返回空';
+      return displayPath(KNOWLEDGE_FILE) + ' 里没有任何片段 —— 检索会永远返回空';
     }
     const generated = fs.statSync(KNOWLEDGE_FILE).mtimeMs;
     let newest = 0;
@@ -243,7 +262,8 @@ function knowledgeWarning() {
     };
     walk(KNOWLEDGE_DIR);
     if (newest > generated) {
-      return 'knowledge/ 里有文件比 public/knowledge.json 新 —— 请重新运行 npm run build:knowledge';
+      return 'knowledge/ 里有文件比 ' + displayPath(KNOWLEDGE_FILE)
+        + ' 新 —— 请重新运行 npm run build:knowledge';
     }
   } catch { /* 检查本身失败不该影响启动 */ }
   return null;
@@ -286,12 +306,20 @@ function readBody(req) {
 }
 
 function serveStatic(req, res, urlPath) {
-  const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
+  // 目录以 index.html 收尾：站点根 / 与应用目录 /frontend-build-agent/
+  // 各自落到自己的首页，不必为每个目录单独写一条路由。
+  let rel = urlPath.replace(/^\/+/, '');
+  if (rel === '' || rel.endsWith('/')) rel += 'index.html';
+
   const full = path.join(PUBLIC_DIR, rel);
-  // 防目录穿越
-  if (!full.startsWith(PUBLIC_DIR)) {
+
+  // 防目录穿越。用 path.relative 判断，而不是 startsWith 前缀比较：
+  // 前缀比较会把 public-x/ 这种「同前缀的兄弟目录」一起放行。
+  const back = path.relative(PUBLIC_DIR, full);
+  if (back.startsWith('..') || path.isAbsolute(back)) {
     res.writeHead(403); return res.end('Forbidden');
   }
+
   fs.readFile(full, (err, buf) => {
     if (err) { res.writeHead(404); return res.end('Not Found'); }
     res.writeHead(200, {
@@ -306,7 +334,14 @@ function serveStatic(req, res, urlPath) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const p = url.pathname;
+
+  // 应用挂在 /frontend-build-agent/ 下，而前端用相对路径探测后端
+  // （fetch('api/bootstrap')），落到这里就是 /frontend-build-agent/api/bootstrap。
+  // 所以只对 API 去掉这层前缀 —— 静态文件本身就是按该目录结构摆放的，不改写。
+  // 不做成「去掉前缀后再统一路由」：那样 /frontend-build-agent/ 会被归一成 /，
+  // 而 / 要服务的是站点根的跳转页，不是应用本身。
+  let p = url.pathname;
+  if (p.startsWith(APP_BASE + '/api/')) p = p.slice(APP_BASE.length);
 
   try {
     // 部署用的健康检查：负载均衡 / 容器编排都要一个不依赖模型的探针。
@@ -483,8 +518,10 @@ server.listen(PORT, () => {
   console.log('');
   console.log('  前端打包构建学习助手  已启动');
   console.log('  ──────────────────────────────────────');
-  console.log(`  地址      http://localhost:${PORT}`);
-  console.log(`  知识库    ${chunks} 个片段（来自 knowledge/，经 public/knowledge.json）`);
+  // 打印的是应用的完整地址（含子路径）—— 直接复制就能打开。
+  // 站点根会跳转到这里，但没必要让人先看一次跳转。
+  console.log(`  地址      http://localhost:${PORT}${APP_BASE}/`);
+  console.log(`  知识库    ${chunks} 个片段（来自 knowledge/，经 ${displayPath(KNOWLEDGE_FILE)}）`);
   const warn = knowledgeWarning();
   if (warn) console.log(`  ⚠ 语料      ${warn}`);
   console.log(`  状态文件  data/state.json（进度）+ data/history.json（对话，${loadHistory().length} 条）`);
