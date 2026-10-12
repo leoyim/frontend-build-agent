@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# 部署的是 public/ 这一个目录：它就是完整的静态站点，
+# 页面加载后探测不到 /api，会自动切到浏览器内的 client-backend.js。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署，新的推上去就取消排队中的旧的
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建静态站点
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 语料改过却忘了重新生成 knowledge.json 的话，站点会用旧资料作答，
+      # 而且页面上不会有任何异常 —— 这条检查就是为了拦住这种静默过期。
+      - name: 语料生成物必须是最新的
+        run: |
+          node tools/build-knowledge.js
+          if ! git diff --exit-code -- public/knowledge.json; then
+            echo "::error::knowledge/ 里改过内容，但 public/knowledge.json 没有重新生成。请本地运行 npm run build:knowledge 并提交产物。"
+            exit 1
+          fi
+
+      - name: 静态站点自检
+        run: |
+          test -f public/index.html
+          test -f public/core.js
+          test -f public/client-backend.js
+          test -f public/knowledge.json
+          echo "public/ 文件齐备：$(ls public | tr '\n' ' ')"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    name: 发布
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

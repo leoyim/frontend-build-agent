@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: 启动冒烟测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # 项目零第三方依赖，所以没有 npm ci 这一步
+      - name: 语法检查
+        run: |
+          node --check server.js
+          node --check public/app.js
+      # 语料现在是仓库内的数据元，缺了应用会静默退化成「检索不到任何资料」
+      - name: 知识库必须随仓库一起提交
+        run: |
+          test -d knowledge || { echo "::error::knowledge/ 不在仓库里"; exit 1; }
+          n=$(find knowledge -name "*.md" | wc -l)
+          echo "knowledge/ 下有 $n 个 Markdown"
+          test "$n" -gt 0
+
+      # 两端（服务端与浏览器）读的是同一份生成物，它过期了不会报错、只会用旧资料
+      - name: 语料生成物必须是最新的
+        run: |
+          node tools/build-knowledge.js
+          if ! git diff --exit-code -- public/knowledge.json; then
+            echo "::error::knowledge/ 改过但 public/knowledge.json 没重新生成。请运行 npm run build:knowledge 并提交。"
+            exit 1
+          fi
+      - name: 起服务并打健康检查
+        run: |
+          node server.js &
+          for i in $(seq 1 30); do
+            curl -sf localhost:7310/api/health && break
+            sleep 0.5
+          done
+          curl -sf localhost:7310/api/health | tee /tmp/h.json
+          # 片段数为 0 = 知识库没接上，这是最容易漏掉的回归
+          grep -q "\"knowledgeChunks\":[1-9]" /tmp/h.json

@@ -1,0 +1,40 @@
+# ── 运行时数据：含明文 API Key 与个人学习进度，绝不能提交 ──────────
+data/config.json
+data/state.json
+data/history.json
+
+# ── 依赖与构建产物 ──────────────────────────────────
+node_modules/
+dist/
+build/
+
+# ── 环境变量（允许提交模板）──────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── 日志与临时文件 ──────────────────────────────────
+*.log
+tmp/
+.cache/
+
+# ── 编辑器与 IDE ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── 操作系统：Windows 与 macOS 都要覆盖 ─────────────
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# ── 浏览器自动化产物 ─────────────────────────────────
+.playwright-cli/
+.agent-browser/
+
+# ── 个人机器上的本地覆盖 ─────────────────────────────
+*.local

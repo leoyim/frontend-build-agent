@@ -1,0 +1,1133 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   前端打包构建学习助手 · 样式
+
+   设计家族：glass / frosted，以 Apple 的系统语汇落地，但把「友好」写在
+   三处具体的地方，而不是靠加卡通图标：
+     1) 色彩：主色之外补一支紫罗兰，用于品牌与庆祝态；环境光用三个色相
+        的低透明度径向渐变，让毛玻璃真的能糊到东西。
+     2) 措辞：进度面板有随进度变化的鼓励语（.cheer），弹窗是「三步上手」
+        而不是参数说明。
+     3) 圆角与间距：整体比工具型界面大一档，点按目标不小于 34px。
+
+   三条贯穿全局的原则不变：
+
+   1) 颜色用「语义 + 透明度」而不是手挑的灰色十六进制值。
+   2) 材质是真的：浮层必须压在会滚动的内容上。
+   3) 动效只走 transform / opacity。
+
+   基准 16px，间距一律 4 的倍数。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 三条贯穿全局的原则：
+   1) 颜色用「语义 + 透明度」而不是手挑的灰色十六进制值。Apple 的标签色是同一支
+      墨色按不同 alpha 分层（label-1 ~ label-4），所以深色模式不需要另一套灰阶：
+      换个底色，层级自动成立。
+   2) 材质是真的。顶栏与输入区用 absolute 浮在消息之上，消息从它们下面滚过去，
+      backdrop-filter 才有东西可模糊；没有可模糊内容的毛玻璃是假效果。
+   3) 动效只走 transform / opacity，且只在解释状态时出现。进度条用 scaleX
+      而不是 width —— 后者会触发布局，是性能反模式。
+
+   基准 16px，间距一律 4 的倍数。
+   注意：CSS 注释不能嵌套。这段文件头曾被截断，导致后面一段说明变成
+   裸露的 CSS 文本、把整个 :root 规则吃掉 —— 令牌全空，浅色模式整个塌掉。
+   改这里时务必确认注释的起止标记成对。 */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── 排版 ────────────────────────────────────────────────────────────── */
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+          "Segoe UI", system-ui, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono",
+          "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-15: 15px;
+  --fs-16: 16px;   /* 正文。中文阅读的舒适点 */
+  --fs-17: 17px;
+  --fs-20: 20px;
+
+  /* ── 圆角标度（一套，按元素层级取值）────────────────────────────────── */
+
+  /* Apple 的圆角比通用 Web 大一档且层级拉开：行内元素最小、卡片居中、
+     弹窗最大。之前 8/11/14/18/22 的问题是中段挤在一起，
+     卡片（14）和输入框（18）几乎一样大，层级读不出来。 */
+  --r-xs: 6px;     /* 行内小标记 */
+  --r-sm: 10px;    /* 列表行、代码块 */
+  --r-md: 12px;    /* 输入框、内层块 */
+  --r-lg: 18px;    /* 卡片 */
+  --r-xl: 22px;    /* 弹窗、气泡 */
+  --r-full: 999px;
+
+  /* ── 动效 ────────────────────────────────────────────────────────────── */
+
+  --ease: cubic-bezier(.32, .72, 0, 1);       /* Apple 的标准出场曲线 */
+  --ease-soft: cubic-bezier(.4, 0, .2, 1);
+  --dur-1: 140ms;
+  --dur-2: 260ms;
+  --dur-3: 420ms;
+
+  /* ── 布局常量 ────────────────────────────────────────────────────────── */
+
+  --topbar-h: 56px;
+  --composer-h: 148px;   /* 仅作无 JS 时的兜底，实际值由脚本量出 */
+
+  /* 主区内容列。顶栏、消息、快捷短语、输入区四处共用同一组值 ——
+     它们各写各的 780px/24px 是改版前的另一个乱源：窗口一宽，
+     顶栏还贴着左边，气泡却已经在中间了。 */
+  --col: 780px;
+  --col-pad: 24px;
+
+  /* ── 基础色（浅色）───────────────────────────────────────────────────── */
+
+  /* ── 三个层级 ──────────────────────────────────────────────────────────
+     画布（最底） < 侧栏轨道 < 卡片。
+
+     关键决定：**层级只用底色表达，不用描边**。
+     上一版给卡片、徽章、按钮、输入框全加了一圈 1px 灰线，
+     结果满屏都是线，像没做完的线框图 —— 那正是「丑」的来源。
+     Apple 的分组式界面里，白卡浮在浅灰底上就够了，描边是多余的。
+     线只留给两种地方：区域与区域之间的分界，以及卡片内部的列表分隔。 */
+
+  --bg-base: #f5f5f7;          /* 画布：Apple systemGroupedBackground */
+  --surface: #ffffff;          /* 卡片 */
+  --bg-elevated: #ffffff;
+  --mat-sidebar-solid: #dcdce2; /* 侧栏实色版：不支持毛玻璃时兜底 */
+
+  /* 三级灰阶全部压到 4.5:1 以上。层级由字号和字重表达，不靠把字调淡。 */
+  --label-1: #1d1d1f;                                  /* 主文字，15.6:1 */
+  --label-2: rgba(29, 29, 31, .72);                    /* 次要，5.7:1 */
+  --label-3: rgba(29, 29, 31, .58);                    /* 三级，4.5:1 */
+  --label-4: rgba(29, 29, 31, .16);                    /* 仅用于分隔与占位图形 */
+  --label-strong: rgba(29, 29, 31, .82);               /* 落在有色底纹上的文字 */
+
+  /* 区域分界比卡片内部分隔要实一点，两者需求不同，所以分开命名 */
+  --hairline: rgba(60, 60, 67, .09);    /* 卡片内部的列表分隔线 */
+  --separator: rgba(60, 60, 67, .17);   /* 侧栏↔主区、顶栏↔消息 */
+  --separator-strong: rgba(60, 60, 67, .30);
+
+  /* 控件的「底色」体系。按钮、徽章、输入框都用它表达可交互，
+     而不是靠描边 —— 这正是 Apple 的 .fill 用法。 */
+  --fill-1: rgba(120, 120, 128, .08);
+  --fill-2: rgba(120, 120, 128, .12);   /* 控件默认 */
+  --fill-3: rgba(120, 120, 128, .18);   /* 控件 hover / 按下 */
+
+  --code-bg: rgba(120, 120, 128, .08);
+
+  --accent: #0071e3;           /* Apple systemBlue。实色填充按钮就用它 */
+  --accent-press: #0060c0;
+  --accent-2: #5e5ce6;         /* Apple systemIndigo：只用于品牌与庆祝态 */
+  --on-accent: #ffffff;
+  /* 「用于文字的强调色」和「用于填充的强调色」不是同一个值。
+     systemBlue 印在浅蓝底纹上只有 3.3:1，做正文色不达标；
+     往墨色里混一档之后，白底 6.9:1、侧栏轨道 5.1:1、自身底纹上 4.9:1，全过。 */
+  --accent-text: color-mix(in srgb, #0071e3 76%, #1d1d1f);
+
+  --red: #d70015;
+  --green: #1f8f45;
+  --orange: #b25000;
+
+  /* ── 材质 ────────────────────────────────────────────────────────────── */
+
+  --blur-thin: saturate(180%) blur(20px);
+  --blur-regular: saturate(180%) blur(30px);
+  --blur-thick: saturate(190%) blur(44px);
+
+  --mat-chrome: rgba(250, 250, 252, .80);      /* 顶栏与输入区 */
+  /* 侧栏要明显比画布深一档。只差 3% 明度的话，两个区域在普通屏幕上就是一片白；
+     这里给到约 1.25:1 的明度差 —— Apple 浅色侧栏大致就是这个量级。 */
+  --mat-sidebar: rgba(219, 219, 227, .90);
+  --mat-sheet: rgba(250, 250, 252, .92);       /* 弹窗 */
+
+  /* ── 阴影 ────────────────────────────────────────────────────────────────
+     Apple 的高度感来自「很大的模糊半径 + 很低的透明度」，而不是深色投影。
+     上一版 shadow-1 有两层可见的边，卡片看着发脏。现在只留一层极淡的。 */
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .04), 0 1px 8px rgba(0, 0, 0, .03);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, .05), 0 8px 24px rgba(0, 0, 0, .06);
+  --shadow-3: 0 2px 8px rgba(0, 0, 0, .06), 0 24px 64px rgba(0, 0, 0, .18);
+
+  /* ── 环境光 ──────────────────────────────────────────────────────────────
+     只负责「让毛玻璃有东西可糊」，不负责好看。色相越多、alpha 越高，
+     底色自己就越像一个有花纹的大色块 —— 而它本该是全场最安静的一层。 */
+  --ambient-a: rgba(0, 113, 227, .030);
+  --ambient-b: rgba(94, 92, 230, .026);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* 深色下同样是「卡片刻在底色上」：画布最暗、卡片最亮。
+       侧栏材料比画布再暗一档，卡片才能浮起来。 */
+    --bg-base: #17171c;        /* Apple systemGroupedBackground（dark）*/
+    --surface: #242429;        /* secondarySystemGroupedBackground */
+    --bg-elevated: #242429;
+    --mat-sidebar-solid: #121216;
+
+    --label-1: rgba(255, 255, 255, .95);
+    --label-2: rgba(255, 255, 255, .70);
+    --label-3: rgba(255, 255, 255, .54);
+    --label-4: rgba(255, 255, 255, .18);
+    --label-strong: rgba(255, 255, 255, .84);
+
+    --hairline: rgba(255, 255, 255, .09);
+    --separator: rgba(255, 255, 255, .16);
+    --separator-strong: rgba(255, 255, 255, .28);
+
+    --fill-1: rgba(120, 120, 128, .24);
+    --fill-2: rgba(120, 120, 128, .34);
+    --fill-3: rgba(120, 120, 128, .46);
+
+    --code-bg: rgba(120, 120, 128, .26);
+
+    --accent: #0a84ff;           /* Apple systemBlue（dark）*/
+    --accent-press: #409cff;
+    --accent-2: #7d7aff;
+    --on-accent: #ffffff;
+    --accent-text: color-mix(in srgb, #0a84ff 72%, #ffffff);
+
+    --red: #ff6961;
+    --green: #4cd964;
+    --orange: #ffb340;
+
+    --mat-chrome: rgba(23, 23, 28, .82);
+    --mat-sidebar: rgba(12, 12, 16, .84);
+    --mat-sheet: rgba(40, 40, 46, .92);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .30), 0 1px 8px rgba(0, 0, 0, .22);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, .35), 0 8px 24px rgba(0, 0, 0, .35);
+    --shadow-3: 0 2px 8px rgba(0, 0, 0, .45), 0 24px 64px rgba(0, 0, 0, .55);
+
+    --ambient-a: rgba(10, 132, 255, .055);
+    --ambient-b: rgba(125, 122, 255, .045);
+  }
+}
+
+/* ────────────────────────────── 基础 ────────────────────────────── */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--label-1);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+/* 环境光层：固定不动，给上层的毛玻璃提供可模糊的底 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 46% at 14% 2%, var(--ambient-a), transparent 72%),
+    radial-gradient(54% 44% at 92% 98%, var(--ambient-b), transparent 74%);
+}
+
+/* 工具类 */
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.dim  { color: var(--label-2); }
+.tiny { font-size: var(--fs-12); }
+.grow { flex: 1 1 auto; min-height: 0; }
+
+/* 统一焦点环：Apple 的柔光蓝晕，只对键盘用户出现 */
+:where(button, a, input, textarea, [tabindex], .sec, .qp, .preset):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 38%, transparent);
+  border-color: var(--accent);
+}
+
+/* 滚动条：贴近系统的细滚动条，不抢视觉 */
+* { scrollbar-width: thin; scrollbar-color: var(--label-4) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--label-4);
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--label-3); }
+
+/* ────────────────────────────── 骨架 ────────────────────────────── */
+
+#app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  /* 用 dvh 而不是 vh：移动端地址栏收起时 vh 会把底部截掉。
+     不再写 vh 兜底，因为 dvh 从 2022 年起所有目标浏览器都已支持，
+     留一行死代码只会让静态检查报假警告。 */
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ────────────────────────────── 侧栏 ────────────────────────────── */
+
+#sidebar {
+  width: 304px;
+  flex: 0 0 304px;
+  display: flex;
+  flex-direction: column;
+  /* 段落间距交给各段自己的上下内边距，不再用 gap —— 段与段之间靠一条发丝线
+     分隔，这是 Apple 侧栏（Finder / 音乐）的做法，比一堆卡片干净得多。 */
+  gap: 0;
+  padding: 16px 12px 14px;
+  /* 窗口一矮，侧栏里每张卡片都会按 flex-shrink 默认值一起被压缩，
+     内容直接被裁掉半行 —— 这是「界面很乱」最直接的来源。
+     所以：固定卡片一律不收缩，只有课程列表可以压；真放不下时整条侧栏滚动。 */
+  overflow-y: auto;
+  /* 侧栏比画布深一档。两个区域靠底色分开，比靠一根 1px 线分开结实得多 */
+  background: var(--mat-sidebar);
+  -webkit-backdrop-filter: var(--blur-regular);
+  backdrop-filter: var(--blur-regular);
+  border-right: 1px solid var(--separator);
+  /* 只能写 overflow-x，不能写 overflow 简写：
+     简写会重置下面的 overflow-y，"侧栏可滚动"就没了。 */
+  overflow-x: hidden;
+}
+
+/* 品牌行与下面的卡片组之间画一条线：它是「标题区」，不是一张卡片 */
+.brand {
+  display: flex; gap: 11px; align-items: center;
+  padding: 2px 4px 14px;
+  border-bottom: 1px solid var(--separator);
+  flex: 0 0 auto;
+}
+
+.brand-mark {
+  width: 34px; height: 34px; flex: 0 0 34px;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+/* 图标自带底色与圆角，这里只负责把它裁进形状里 */
+.brand-mark img { display: block; width: 100%; height: 100%; }
+
+.brand-name { font-size: var(--fs-15); font-weight: 640; letter-spacing: -.005em; }
+.brand-sub  { font-size: var(--fs-11); color: var(--label-2); letter-spacing: .01em; }
+
+/* 面板：靠色调分层，不靠边框堆叠 */
+
+/* 侧栏里的「段」不是卡片，是分组。
+   去掉白底、圆角、投影，只留上下内边距和一条分段用的发丝线。
+   上一版这里是 5 个白色圆角盒子摞在灰轨道上 —— 侧面看就是「一堆盒子」，
+   也是「丑」的主要来源。 */
+.panel {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 15px 4px;
+  border-top: 1px solid var(--separator);
+  flex: 0 0 auto;      /* 固定段落：高度由内容决定，绝不被压扁 */
+}
+.panel:first-of-type { border-top: 0; padding-top: 4px; }
+
+/* 只有课程列表参与「分配剩余空间」。min-height 保证窗口很矮时
+   它也还留得下两三行，而不是塌成一条缝。 */
+.panel.grow {
+  display: flex; flex-direction: column; overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 150px;
+}
+
+/* 分组标题：小一号、加字距，像 macOS 侧栏的分组名。
+   不再画下划线 —— 分段线已经在段与段之间了，段内再画一条就是重复。 */
+.panel-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: var(--fs-11);
+  font-weight: 620;
+  color: var(--label-2);
+  letter-spacing: .02em;
+  margin-bottom: 9px;
+}
+.panel-head .mono { color: var(--label-2); font-size: var(--fs-11); font-weight: 500; }
+
+.panel-foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; margin-top: 7px;
+}
+.panel-foot .mono { font-size: var(--fs-13); font-weight: 620; color: var(--label-1); }
+/* 侧栏轨道压深之后，这里的 11px 小字用三级灰只剩 3.7:1。
+   三级灰从此只留给占位符和装饰性图形，正文一律不低于二级。 */
+.panel-foot .dim  { font-size: var(--fs-11); color: var(--label-2); text-align: right; line-height: 1.45; }
+
+/* 进度条：用 scaleX 驱动，不碰 width */
+.bar {
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--fill-3);
+  overflow: hidden;
+}
+.bar-fill {
+  width: 100%; height: 100%;
+  border-radius: var(--r-full);
+  background: var(--accent);   /* 实色。渐变留给品牌，界面元素一律实色 */
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-3) var(--ease);
+  will-change: transform;
+}
+
+/* 鼓励语：随进度换一句话。
+   纯文字，不加底色也不加竖条 —— 进度卡片里已经有进度条和百分比两处实色，
+   再加任何一根线或一块底都会把这格填满。层级靠「首句加粗 + 正文次灰」。 */
+.cheer {
+  margin-top: 11px;
+  font-size: var(--fs-12);
+  line-height: 1.6;
+  color: var(--label-2);
+}
+.cheer:empty { display: none; }
+.cheer b { font-weight: 620; color: var(--label-1); }
+
+/* 课程清单 */
+
+/* 负外边距 -5px + 行内 5px 内边距 = 行内容刚好落回卡片的 13px 内边距线上，
+   与卡片标题、进度条同一条左对齐线。
+   改版前是 -4px / 8px，行比标题多缩进 4px —— 单看没什么，
+   整列扫下来就是「文字排歪了」。 */
+.course-list {
+  overflow-y: auto;
+  padding-right: 2px;
+  margin: -2px -5px;
+  /* 作为 .panel.grow 的 flex 子项，min-height:0 是它能真正滚起来的必要条件 */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 模块标题用小字 + 各自的颜色区分。
+   上一版是「一根 3px 色条 + 一个圆点 + 一行文字」，三个视觉元件挤在 13px 的行里，
+   横向一列扫下来全是小色块。现在只留颜色这一个变量，其余交给字重。
+   颜色由 JS 按模块序打进 m1~m4；取值都压到白底 4.5:1 以上。 */
+.mod-label {
+  font-size: var(--fs-11);
+  font-weight: 620;
+  color: var(--m-color, var(--label-2));
+  padding: 14px 5px 6px;
+  letter-spacing: .01em;
+}
+.mod-label.m1 { --m-color: #1a6fd4; }   /* 核心原理 */
+.mod-label.m2 { --m-color: #6b46d4; }   /* Webpack 与 Vite */
+.mod-label.m3 { --m-color: #a35400; }   /* 新趋势 */
+.mod-label.m4 { --m-color: #0d7a68; }   /* 学习路径 */
+.mod-label:first-child { padding-top: 2px; }
+
+/* 深色底上要反过来：浅色系才够对比度 */
+@media (prefers-color-scheme: dark) {
+  .mod-label.m1 { --m-color: #6cb2ff; }
+  .mod-label.m2 { --m-color: #b39bff; }
+  .mod-label.m3 { --m-color: #ffb340; }
+  .mod-label.m4 { --m-color: #4fd1c0; }
+}
+
+.sec {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 5px;           /* 行高从 33px 提到 35px：鼠标好点，触屏也够 */
+  border-radius: var(--r-sm); /* 选中态是一块圆角色块，圆角太小会显得锋利 */
+  font-size: var(--fs-13);
+  color: var(--label-2);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--dur-1) var(--ease-soft), color var(--dur-1) var(--ease-soft);
+}
+/* 状态指示：这三个点编码真实状态（未开始/已完成/进行中），不是装饰 */
+.sec::before {
+  content: "";
+  flex: 0 0 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--label-4);
+  transition: background var(--dur-1) var(--ease-soft), box-shadow var(--dur-1) var(--ease-soft);
+}
+.sec:hover { background: var(--fill-2); color: var(--label-1); }
+.sec:active { transform: scale(.985); }
+
+.sec .sid { font-family: var(--mono); font-size: 10.5px; color: var(--label-2); flex: 0 0 auto; }
+.sec .sec-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sec.done { color: var(--label-1); }
+.sec.done::before { background: var(--green); }
+
+
+.sec.current {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent-text);   /* 不是 --accent：淡蓝底上的正蓝色文字不达标 */
+  font-weight: 600;
+}
+.sec.current::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.sec.current .sid { color: var(--accent-text); }
+
+.sec-flag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--accent-text);
+  opacity: .9;
+}
+
+/* 待办 / 画像 */
+
+.pending-body, .profile-body { font-size: var(--fs-12); line-height: 1.5; }
+.pending-body .item, .profile-body .item {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 7px 0;
+  /* 段内列表用更轻的 hairline，段与段之间才用 separator —— 两级分隔线各司其职 */
+  border-top: 1px solid var(--hairline);
+  color: var(--label-1);
+}
+.pending-body .item:first-child, .profile-body .item:first-child { border-top: 0; padding-top: 2px; }
+
+.pending-body .sec-tag, .profile-body .cat {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1.5px 6px;
+  border-radius: var(--r-full);
+  background: var(--fill-3);
+  color: var(--label-2);
+}
+.pending-body .sec-tag.badge-warn { background: color-mix(in srgb, var(--orange) 18%, transparent); color: var(--orange); }
+.profile-body .cat { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-text); }
+
+.sidebar-foot { padding: 6px 4px 0; flex: 0 0 auto; }
+
+/* ────────────────────────────── 主区 ────────────────────────────── */
+
+#main { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+/* 顶栏浮在消息之上，消息从它下面滚过去，材质才有意义 */
+#topbar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  height: var(--topbar-h);
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+  /* 顶栏自身仍横贯整条主区（不然玻璃条会断成一段），
+     但内容盒缩到和消息列等宽 —— 于是左右两端与气泡严丝合缝对齐。
+     窄屏下 (100% - 780px) 为负，max() 兜回 14px，不会把内容挤没。 */
+  padding-block: 0;
+  padding-inline: max(14px, calc((100% - var(--col)) / 2 + var(--col-pad)));
+  background: var(--mat-chrome);
+  -webkit-backdrop-filter: var(--blur-thin);
+  backdrop-filter: var(--blur-thin);
+  border-bottom: 1px solid var(--separator);
+}
+
+.topbar-left { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: var(--fs-13); color: var(--label-2); }
+.topbar-left #status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+.dot {
+  width: 8px; height: 8px; flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--label-4);
+  transition: background var(--dur-2) var(--ease-soft), box-shadow var(--dur-2) var(--ease-soft);
+}
+.dot.on  { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 20%, transparent); }
+.dot.off { background: var(--orange); box-shadow: 0 0 0 3px color-mix(in srgb, var(--orange) 20%, transparent); }
+
+#messages {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 上下都要留出被浮层遮住的高度，否则首尾消息会被顶栏和输入区压住。
+     底部值由脚本实测输入区高度后回写（输入框会随内容长高）。 */
+  padding: calc(var(--topbar-h) + 24px) 0 var(--composer-h);
+  scroll-behavior: smooth;
+}
+
+/* 消息间距给足：Apple 的排版靠留白拉开呼吸感，而不是靠分隔线 */
+.msg { max-width: var(--col); margin: 0 auto 26px; padding: 0 var(--col-pad); }
+
+.msg-role {
+  font-size: var(--fs-11);
+  font-weight: 620;
+  color: var(--label-2);
+  margin-bottom: 7px;
+  letter-spacing: .01em;
+}
+
+.bubble {
+  /* 气泡是画布上的白卡：靠底色差立住，描边去掉。
+     圆角取全站最大的一档 —— 它是屏幕上最大的连续表面。 */
+  border-radius: var(--r-xl);
+  padding: 16px 20px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+  overflow-wrap: anywhere;
+}
+
+/* 用户消息：iMessage 式的实色气泡，右对齐，尾巴切一个角 */
+.msg.user { display: flex; flex-direction: column; align-items: flex-end; }
+.msg.user .msg-role { padding-right: 4px; }
+.msg.user .bubble {
+  max-width: 76%;
+  /* iMessage 就是实色，不是渐变。渐变只留给了品牌标记 */
+  background: var(--accent);
+  color: var(--on-accent);
+  /* 右下角切一刀当「尾巴」，其余三只角跟着气泡走 */
+  border-radius: var(--r-xl) var(--r-xl) var(--r-xs) var(--r-xl);
+  box-shadow: none;   /* 实色气泡自己有边界，再叠投影只会显脏 */
+}
+.msg.user .md code,
+.msg.user .md pre {
+  background: rgba(255, 255, 255, .2);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+.msg.user .md a { color: var(--on-accent); }
+
+/* 导师与系统消息：安静的表面，让长文成为主角 */
+.msg.assistant .bubble { padding: 17px 21px; }
+
+/* 系统/引导消息：和助手气泡同一张白卡，只把字号收小一档。
+   上一版给它加了左侧蓝条，那是 Bootstrap 警告框的做法 ——
+   Apple 的界面里没有这种彩条，它把「这是另一类消息」交给角色标签和字号。 */
+.msg.system .bubble {
+  background: var(--surface);
+  padding: 14px 18px;
+  font-size: var(--fs-13);
+  color: var(--label-2);
+}
+/* 出错消息：淡红底 + 无色描边，和全站「用底色表达状态」保持一致 */
+.msg.error .bubble {
+  background: color-mix(in srgb, var(--red) 10%, var(--bg-elevated));
+  box-shadow: none;
+}
+.msg.error .bubble .md { color: var(--red); }
+
+.msg-meta {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: 9px;
+}
+.msg.user .msg-meta { justify-content: flex-end; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2.5px 9px;
+  border-radius: var(--r-full);
+  /* 徽章浮在画布上（不在气泡里），fill-1 那种 8% 的灰几乎看不见形状 */
+  background: var(--fill-2);
+  font-size: 10.5px;
+  font-weight: 550;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+}
+.chip.ok {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+}
+/* 庆祝态：与 .ok 区分开，让「又有新节完成」在记录里一眼可辨。
+   文字色混进一点主标签墨色，保证小字号下仍然是可读的对比度。 */
+.chip.win {
+  background: color-mix(in srgb, var(--accent-2) 15%, transparent);
+  color: color-mix(in srgb, var(--accent-2) 72%, var(--label-1));
+}
+
+/* 打字指示 */
+.typing { display: inline-flex; gap: 5px; align-items: center; height: 22px; }
+.typing i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--label-3);
+  animation: blink 1.3s infinite var(--ease-soft);
+}
+.typing i:nth-child(2) { animation-delay: .18s; }
+.typing i:nth-child(3) { animation-delay: .36s; }
+@keyframes blink { 0%, 78%, 100% { opacity: .22; transform: translateY(0) } 38% { opacity: .95; transform: translateY(-2px) } }
+
+/* ────────────────────────────── 输入区 ────────────────────────────── */
+
+/* 同样浮在消息之上，形成上下两道材质夹住滚动内容 */
+#composer-wrap {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 20;
+  padding: 10px 22px 13px;
+  background: var(--mat-chrome);
+  -webkit-backdrop-filter: var(--blur-thin);
+  backdrop-filter: var(--blur-thin);
+  border-top: 1px solid var(--separator);
+}
+
+/* 输入区与消息区必须共用同一个内容盒。
+   否则气泡有 24px 内边距、输入框没有，两者左边缘会差 41px，
+   读起来整列是歪的 —— 这是最容易在改版里漏掉的对齐问题。 */
+#quick-prompts {
+  max-width: var(--col); margin: 0 auto 9px;
+  padding-inline: var(--col-pad);
+  display: flex; flex-wrap: wrap; gap: 7px;
+}
+
+.qp {
+  font-size: var(--fs-12);
+  font-weight: 540;
+  padding: 7px 14px;      /* 触屏上 5px 内边距会掉到 29px 高，离可点太小 */
+  border-radius: var(--r-full);
+  cursor: pointer;
+  background: var(--fill-2);
+  color: var(--label-1);
+  border: 1px solid transparent;
+  transition: background var(--dur-1) var(--ease-soft), color var(--dur-1) var(--ease-soft), transform var(--dur-1) var(--ease-soft);
+}
+.qp:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
+.qp:active { transform: scale(.96); }
+
+#composer {
+  max-width: var(--col); margin: 0 auto;
+  padding-inline: var(--col-pad);
+  display: flex; gap: 9px; align-items: flex-end;
+}
+
+#input {
+  flex: 1 1 auto;
+  resize: none;
+  max-height: 180px;
+  padding: 12px 16px;
+  font-family: var(--font);
+  font-size: var(--fs-15);
+  line-height: 1.55;
+  color: var(--label-1);
+  background: var(--fill-2);
+  /* 无描边的填充式输入框（Apple 的 search/text field 就是这一路）。
+     聚焦时底色转白 + 一圈柔光蓝，比换边框颜色更清楚，也不引入新的线。 */
+  border: 0;
+  border-radius: var(--r-md);
+  outline: none;
+  transition: background var(--dur-1) var(--ease-soft), box-shadow var(--dur-1) var(--ease-soft);
+}
+#input::placeholder { color: var(--label-3); }
+#input:hover { background: var(--fill-3); }
+#input:focus {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.composer-hint {
+  max-width: var(--col); margin: 8px auto 0;
+  padding-inline: var(--col-pad);
+  text-align: center;
+  color: var(--label-2);
+}
+.composer-hint code {
+  font-family: var(--mono); font-size: 10.5px;
+  background: var(--fill-2); padding: 1.5px 5px; border-radius: var(--r-xs);
+}
+
+/* ────────────────────────────── 按钮 ────────────────────────────── */
+
+.btn {
+  font-family: var(--font);
+  font-size: var(--fs-13);
+  font-weight: 590;
+  padding: 9px 18px;
+  border-radius: var(--r-full);
+  border: 1px solid transparent;
+  background: var(--fill-2);
+  color: var(--label-1);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background var(--dur-1) var(--ease-soft), color var(--dur-1) var(--ease-soft),
+              transform var(--dur-1) var(--ease-soft), box-shadow var(--dur-1) var(--ease-soft);
+}
+.btn:hover { background: var(--fill-3); }
+.btn:active { transform: scale(.97); }
+
+.btn.primary {
+  background: var(--accent);   /* Apple 的填充按钮是实色，不加渐变也不加投影 */
+  color: var(--on-accent);
+  box-shadow: none;
+}
+.btn.primary:hover { background: var(--accent-press); }
+.btn.primary:active { background: var(--accent-press); }
+
+/* 幽灵按钮用「灰底」而不是「描边」表达可点击 —— 这是 Apple 的 .fill 用法。
+   上一版给它们加了一圈线，整条顶栏看着像线框图。 */
+.btn.ghost { background: var(--fill-2); color: var(--label-1); }
+.btn.ghost:hover { background: var(--fill-3); }
+
+.btn.tiny { font-size: var(--fs-12); padding: 5px 12px; }
+
+.btn:disabled { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* 纯图标按钮 */
+.btn.icon-only { width: 34px; height: 34px; padding: 0; border-radius: var(--r-full); }
+.btn.icon-only svg { width: 17px; height: 17px; display: block; }
+
+/* ────────────────────────────── Markdown ────────────────────────────── */
+
+.md { font-size: var(--fs-16); line-height: 1.72; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child  { margin-bottom: 0; }
+
+.md h1, .md h2, .md h3, .md h4 {
+  line-height: 1.35;
+  margin: 22px 0 9px;
+  font-weight: 640;
+  letter-spacing: -.008em;
+}
+.md h1 { font-size: var(--fs-20); }
+.md h2 { font-size: var(--fs-17); }
+.md h3 { font-size: var(--fs-16); }
+.md h4 { font-size: var(--fs-15); color: var(--label-2); }
+
+.md p { margin: 11px 0; }
+.md ul, .md ol { margin: 11px 0; padding-left: 24px; }
+.md li { margin: 5px 0; }
+.md li::marker { color: var(--label-3); }
+
+.md strong { font-weight: 640; }
+.md em {
+  font-style: normal;
+  background: color-mix(in srgb, var(--orange) 16%, transparent);
+  padding: 1px 4px;
+  border-radius: var(--r-xs);
+}
+
+.md code {
+  font-family: var(--mono);
+  font-size: .86em;
+  background: var(--code-bg);
+  padding: 1.5px 6px;
+  border-radius: var(--r-xs);
+}
+
+.md pre {
+  background: var(--code-bg);
+  border-radius: var(--r-md);
+  padding: 14px 17px;
+  overflow-x: auto;
+  margin: 14px 0;
+  line-height: 1.65;
+}
+.md pre code { background: none; padding: 0; font-size: 12.8px; }
+
+.md blockquote {
+  margin: 14px 0;
+  padding: 10px 16px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  color: var(--label-2);
+}
+.md blockquote p { margin: 5px 0; }
+
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: var(--fs-13);
+  display: block;
+  overflow-x: auto;
+}
+.md th, .md td {
+  padding: 9px 13px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--separator);   /* 只留横向发丝线，像 Apple 的表格 */
+}
+.md th {
+  font-weight: 620;
+  font-size: var(--fs-12);
+  color: var(--label-2);
+  white-space: nowrap;
+  border-bottom-color: var(--separator-strong);
+}
+.md tr:last-child td { border-bottom: 0; }
+
+.md hr { border: 0; border-top: 1px solid var(--separator); margin: 22px 0; }
+
+.mermaid-box {
+  margin: 16px 0;
+  padding: 18px 14px;
+  background: var(--fill-1);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+}
+/* 只把画出来的图居中；降级时露出的源码必须左对齐，否则满屏居中的代码没法读 */
+.mermaid-box > .mermaid { text-align: center; }
+.mermaid-box svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.mermaid-box pre, .mermaid-box code { text-align: left; }
+.mermaid-fallback {
+  font-size: var(--fs-11);
+  color: var(--label-2);
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+/* ────────────────────────────── 设置弹窗 ────────────────────────────── */
+
+dialog#settings {
+  padding: 0;
+  width: min(560px, 92vw);
+  max-height: 88dvh;
+  border: 0;                 /* 弹窗的边界由 shadow-3 提供，不需要再描一圈 */
+  border-radius: var(--r-xl);
+  background: var(--mat-sheet);
+  -webkit-backdrop-filter: var(--blur-thick);
+  backdrop-filter: var(--blur-thick);
+  color: var(--label-1);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+dialog#settings::backdrop {
+  background: rgba(0, 0, 0, .3);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+dialog#settings[open] { animation: sheet-in var(--dur-2) var(--ease); }
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+#settings-form {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+  max-height: 88dvh;
+}
+#settings-form h2 { margin: 0; font-size: var(--fs-17); font-weight: 660; letter-spacing: -.01em; }
+#settings-form > p.dim { margin: -6px 0 0; line-height: 1.55; }
+
+#settings-form label {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: var(--fs-12); font-weight: 580; color: var(--label-2);
+}
+#settings-form input {
+  font-family: var(--font);
+  font-size: var(--fs-15);
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  border: 0;
+  background: var(--fill-2);
+  color: var(--label-1);
+  outline: none;
+  transition: background var(--dur-1) var(--ease-soft), box-shadow var(--dur-1) var(--ease-soft);
+}
+#settings-form input::placeholder { color: var(--label-3); }
+#settings-form input:hover { background: var(--fill-3); }
+#settings-form input:focus {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.preset-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: -7px; }
+.preset {
+  font-size: var(--fs-12);
+  font-weight: 540;
+  padding: 6px 13px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  background: var(--fill-2);
+  color: var(--label-1);
+  border: 1px solid transparent;
+  transition: background var(--dur-1) var(--ease-soft), color var(--dur-1) var(--ease-soft), transform var(--dur-1) var(--ease-soft);
+}
+.preset:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
+.preset:active { transform: scale(.96); }
+
+.dialog-actions { display: flex; gap: 9px; justify-content: flex-end; margin-top: 3px; }
+
+.settings-msg { font-size: var(--fs-12); min-height: 17px; line-height: 1.5; color: var(--label-2); }
+.settings-msg.ok  { color: var(--green); }
+.settings-msg.err { color: var(--red); }
+
+/* ────────────────────────────── 使用说明弹窗 ────────────────────────────── */
+
+dialog#guide {
+  padding: 0;
+  width: min(560px, 92vw);
+  max-height: 88dvh;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--mat-sheet);
+  -webkit-backdrop-filter: var(--blur-thick);
+  backdrop-filter: var(--blur-thick);
+  color: var(--label-1);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+dialog#guide::backdrop {
+  background: rgba(0, 0, 0, .3);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+dialog#guide[open] { animation: sheet-in var(--dur-2) var(--ease); }
+
+#guide-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  max-height: 88dvh;
+}
+#guide-body h2 { margin: 0; font-size: var(--fs-17); font-weight: 660; letter-spacing: -.01em; }
+#guide-body > p.dim { margin: -6px 0 0; line-height: 1.55; }
+
+.guide-steps {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 9px;
+}
+/* 三步各自是一块「纸片」，圆角比弹窗小一档、比行内元素大一档 */
+.guide-steps li {
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--fill-1);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+}
+.guide-steps li b { display: block; font-weight: 640; color: var(--label-1); margin-bottom: 2px; }
+.guide-steps li span { color: var(--label-strong); }
+
+/* 提示块：整块淡色底 + 圆角，没有左侧彩条 */
+.guide-tip {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 13px 16px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+  color: var(--label-strong);
+}
+.guide-tip b { font-weight: 640; color: var(--label-1); }
+
+/* ────────────────────────────── 礼花 / 烟花画布 ────────────────────────────── */
+
+#fx {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;   /* 纯装饰：绝不能拦截点击或滚动 */
+}
+
+/* ────────────────────────────── 窄屏 ────────────────────────────── */
+
+.only-narrow { display: none !important; }
+
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, .32);
+  animation: fade-in var(--dur-2) var(--ease-soft);
+}
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+@media (max-width: 900px) {
+  /* 侧栏改为抽屉：窄屏下进度、课程、画像仍然可达，只是改为按需展开 */
+  #sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(320px, 86vw);
+    transform: translateX(-102%);
+    transition: transform var(--dur-2) var(--ease);
+    /* 抽屉用中档高度：shadow-3 是给弹窗的（64px 大模糊），
+       一条贴着屏幕边的抽屉配那么重的投影会显得脏 */
+    box-shadow: var(--shadow-2);
+    background: var(--mat-sidebar);
+    -webkit-backdrop-filter: var(--blur-thick);
+    backdrop-filter: var(--blur-thick);
+  }
+  #sidebar.open { transform: translateX(0); }
+
+  .only-narrow { display: inline-flex !important; }
+
+  #topbar { padding: 0 14px; }
+  /* 手机上先让出「知识库 N 片段」这块 —— 它是给开发者看的，
+     占着位置会把连接状态挤成「已…」，那才是用户真正要看的信息 */
+  #kb-info { display: none; }
+  #messages { padding-top: calc(var(--topbar-h) + 14px); }
+  .msg { padding: 0 15px; margin-bottom: 18px; }
+  #quick-prompts, #composer, .composer-hint { padding-inline: 15px; }
+  .msg.user .bubble { max-width: 86%; }
+  #composer-wrap { padding: 9px 15px 12px; }
+  .md { font-size: 15.5px; }
+  /* iOS Safari 会在聚焦小于 16px 的输入框时自动放大整页 —— 手机上这一点
+     比字号的一致性重要得多，所以窄屏下把输入框提到 16px。 */
+  #input { font-size: 16px; }
+}
+
+/* ────────────────────────────── 可访问性降级 ────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  #messages { scroll-behavior: auto; }
+  .sec:active, .qp:active, .preset:active, .btn:active { transform: none; }
+  /* 动效敏感的用户不该被礼花糊一脸；脚本里也已提前 return，这里是第二道保险 */
+  #fx { display: none; }
+}
+
+/* 浏览器不支持 backdrop-filter 时退回不透明表面，而不是留一层半透明糊 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  /* 没有毛玻璃就用实色顶上。注意侧栏和顶栏不能都退回同一个颜色 ——
+     那样侧栏和卡片会一样白，唯一的分界就只剩一根 1px 线了。 */
+  #sidebar { background: var(--mat-sidebar-solid); }
+  #topbar, #composer-wrap { background: var(--bg-elevated); }
+  dialog#settings, dialog#guide { background: var(--bg-elevated); }
+}
+
+/* 提高对比度偏好 */
+@media (prefers-contrast: more) {
+  :root {
+    --label-2: rgba(29, 29, 31, .78);
+    --label-3: rgba(29, 29, 31, .58);
+    --separator: rgba(60, 60, 67, .32);
+    --separator-strong: rgba(60, 60, 67, .5);
+  }
+  #topbar, #composer-wrap { background: var(--bg-elevated); }
+  #sidebar { background: var(--mat-sidebar-solid); }
+  dialog#guide { background: var(--bg-elevated); }
+}
+
+@media (prefers-color-scheme: dark) and (prefers-contrast: more) {
+  :root {
+    --label-2: rgba(255, 255, 255, .78);
+    --label-3: rgba(255, 255, 255, .58);
+    --separator: rgba(255, 255, 255, .3);
+    --separator-strong: rgba(255, 255, 255, .48);
+  }
+  #topbar, #composer-wrap { background: var(--bg-elevated); }
+  #sidebar { background: var(--mat-sidebar-solid); }
+  dialog#guide { background: var(--bg-elevated); }
+}
