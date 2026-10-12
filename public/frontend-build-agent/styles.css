@@ -51,16 +51,22 @@
   --fs-17: 17px;
   --fs-20: 20px;
 
-  /* ── 圆角标度（一套，按元素层级取值）────────────────────────────────── */
+  /* ── 圆角标度 ──────────────────────────────────────────────────────────
 
-  /* Apple 的圆角比通用 Web 大一档且层级拉开：行内元素最小、卡片居中、
-     弹窗最大。之前 8/11/14/18/22 的问题是中段挤在一起，
-     卡片（14）和输入框（18）几乎一样大，层级读不出来。 */
-  --r-xs: 6px;     /* 行内小标记 */
-  --r-sm: 10px;    /* 列表行、代码块 */
-  --r-md: 12px;    /* 输入框、内层块 */
+     一条规则：**半径随表面尺寸增长**。
+
+     这是 Apple 角部处理里最容易抄错的地方。同一个 22px 圆角，放在 40px 高的
+     按钮上是很圆的胶囊，放在 780x475 的消息大卡上就读成了直角 —— 因为人眼
+     比较的是半径与边长的比例，不是半径的绝对值。所以标度不能按「元素类型」
+     分配，要按「表面大小」取档：小控件给小值，大表面给更大的值，观感才统一。
+
+     另一半在曲率形状上，见下面「连续圆角」那一段。 */
+  --r-xs: 6px;     /* 行内标记、代码片段 */
+  --r-sm: 10px;    /* 列表行、小控件 */
+  --r-md: 14px;    /* 输入框、内层块 */
   --r-lg: 18px;    /* 卡片 */
-  --r-xl: 22px;    /* 弹窗、气泡 */
+  --r-xl: 24px;    /* 消息气泡 —— 屏幕上最大的连续表面 */
+  --r-2xl: 30px;   /* 弹窗、全屏面板 */
   --r-full: 999px;
 
   /* ── 动效 ────────────────────────────────────────────────────────────── */
@@ -262,6 +268,35 @@ body::before {
 }
 ::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--label-3); }
 
+/* ────────────────────── 连续圆角：Apple 的 squircle ──────────────────────
+
+   border-radius 画的是四分之一正圆弧，Apple 用的是连续曲率的超椭圆
+   （俗称 squircle）。同一个半径值，正圆弧的转折更突然、看起来更「尖」——
+   这是照着 Apple 做、却总觉得差一点的常见原因。上一条标度解决「多大」，
+   这一条解决「什么形状」，两件事合起来才是 Apple 的角。
+
+   corner-shape 是 CSS Borders 4 的新属性，与 border-radius 配合工作：
+   半径仍由 border-radius 决定，形状改由它决定。支持面还不完整，所以整段包在
+   @supports 里 —— 不支持的浏览器继续用正圆弧，既不退化也不报错。
+
+   只列**有限半径**的表面。胶囊控件（border-radius: 999px 的按钮、徽章、
+   进度条）不在此列：那是半圆不是角，改形状没有意义。 */
+@supports (corner-shape: squircle) {
+  .bubble,
+  .sec,
+  #input,
+  .brand-mark,
+  .md pre,
+  .md blockquote,
+  .mermaid-box,
+  .guide-steps li,
+  .guide-tip,
+  dialog#settings,
+  dialog#guide {
+    corner-shape: squircle;
+  }
+}
+
 /* ────────────────────────────── 骨架 ────────────────────────────── */
 
 #app {
@@ -285,7 +320,7 @@ body::before {
   /* 段落间距交给各段自己的上下内边距，不再用 gap —— 段与段之间靠一条发丝线
      分隔，这是 Apple 侧栏（Finder / 音乐）的做法，比一堆卡片干净得多。 */
   gap: 0;
-  padding: 16px 12px 14px;
+  padding: 18px 14px 16px;
   /* 窗口一矮，侧栏里每张卡片都会按 flex-shrink 默认值一起被压缩，
      内容直接被裁掉半行 —— 这是「界面很乱」最直接的来源。
      所以：固定卡片一律不收缩，只有课程列表可以压；真放不下时整条侧栏滚动。 */
@@ -331,7 +366,7 @@ body::before {
   background: none;
   box-shadow: none;
   border-radius: 0;
-  padding: 15px 4px;
+  padding: 17px 4px;
   border-top: 1px solid var(--separator);
   flex: 0 0 auto;      /* 固定段落：高度由内容决定，绝不被压扁 */
 }
@@ -437,10 +472,13 @@ body::before {
 
 .sec {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 5px;           /* 行高从 33px 提到 35px：鼠标好点，触屏也够 */
+  padding: 8px 5px;           /* 行高 37px：触屏够点，一列扫下来也更透气 */
   border-radius: var(--r-sm); /* 选中态是一块圆角色块，圆角太小会显得锋利 */
   font-size: var(--fs-13);
-  color: var(--label-2);
+  /* 条目文字用主标签色，不用二级灰。Apple 侧栏里的条目就是 labelColor，
+     灰的那一级留给元数据。之前整列 0.72 透明度的灰，22 行扫下来是一片糊 ——
+     这是「看着旧、不精神」的主要来源，比圆角更能左右第一眼观感。 */
+  color: var(--label-1);
   cursor: pointer;
   border: 1px solid transparent;
   transition: background var(--dur-1) var(--ease-soft), color var(--dur-1) var(--ease-soft);
@@ -457,7 +495,8 @@ body::before {
 .sec:hover { background: var(--fill-2); color: var(--label-1); }
 .sec:active { transform: scale(.985); }
 
-.sec .sid { font-family: var(--mono); font-size: 10.5px; color: var(--label-2); flex: 0 0 auto; }
+/* 编号退到三级灰：条目名是主角，编号只是定位用的。它继续留在 4.5:1 以上 */
+.sec .sid { font-family: var(--mono); font-size: 10.5px; color: var(--label-3); flex: 0 0 auto; }
 .sec .sec-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -466,7 +505,8 @@ body::before {
   white-space: nowrap;
 }
 
-.sec.done { color: var(--label-1); }
+/* 完成态只改状态点。条目文字现在本来就是主标签色，若再给「完成」留一个
+   文字色差异，它会和「当前」那条的强调抢同一份注意力 */
 .sec.done::before { background: var(--green); }
 
 
@@ -563,8 +603,10 @@ body::before {
   scroll-behavior: smooth;
 }
 
-/* 消息间距给足：Apple 的排版靠留白拉开呼吸感，而不是靠分隔线 */
-.msg { max-width: var(--col); margin: 0 auto 26px; padding: 0 var(--col-pad); }
+/* 消息间距给足：Apple 的排版靠留白拉开呼吸感，而不是靠分隔线。
+   30px 是「一条消息读完、下一条还没被带进来」的临界值，
+   再小就开始像连续的段落流水，再大又会让滚动变碎。 */
+.msg { max-width: var(--col); margin: 0 auto 30px; padding: 0 var(--col-pad); }
 
 .msg-role {
   font-size: var(--fs-11);
@@ -576,9 +618,10 @@ body::before {
 
 .bubble {
   /* 气泡是画布上的白卡：靠底色差立住，描边去掉。
-     圆角取全站最大的一档 —— 它是屏幕上最大的连续表面。 */
+     圆角取标度里偏上的一档 —— 它是屏幕上最大的连续表面，
+     按「半径随尺寸增长」的规则，它不能和 40px 的按钮用同一个值。 */
   border-radius: var(--r-xl);
-  padding: 16px 20px;
+  padding: 18px 22px;
   background: var(--bg-elevated);
   box-shadow: var(--shadow-1);
   overflow-wrap: anywhere;
@@ -604,8 +647,8 @@ body::before {
 }
 .msg.user .md a { color: var(--on-accent); }
 
-/* 导师与系统消息：安静的表面，让长文成为主角 */
-.msg.assistant .bubble { padding: 17px 21px; }
+/* 导师消息是长文，内边距再给大一档：讲解类内容里，四周留白直接决定可读性 */
+.msg.assistant .bubble { padding: 19px 24px; }
 
 /* 系统/引导消息：和助手气泡同一张白卡，只把字号收小一档。
    上一版给它加了左侧蓝条，那是 Bootstrap 警告框的做法 ——
@@ -889,7 +932,7 @@ dialog#settings {
   width: min(560px, 92vw);
   max-height: 88dvh;
   border: 0;                 /* 弹窗的边界由 shadow-3 提供，不需要再描一圈 */
-  border-radius: var(--r-xl);
+  border-radius: var(--r-2xl);   /* 全站最大的表面，取标度最上一档 */
   background: var(--mat-sheet);
   -webkit-backdrop-filter: var(--blur-thick);
   backdrop-filter: var(--blur-thick);
@@ -971,7 +1014,7 @@ dialog#guide {
   width: min(560px, 92vw);
   max-height: 88dvh;
   border: 0;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-2xl);   /* 与设置弹窗同一档，两个浮层观感一致 */
   background: var(--mat-sheet);
   -webkit-backdrop-filter: var(--blur-thick);
   backdrop-filter: var(--blur-thick);

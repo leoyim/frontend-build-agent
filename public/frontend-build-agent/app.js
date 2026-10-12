@@ -779,7 +779,7 @@ function celebrate(newlyDone, allDone) {
     FX.fireworks();
     addMessage('system',
       `**全部 ${STATE.progress.total_sections} 节完成！** 你已经走完「核心原理 → 工具对比 → 新趋势 → 学习路径」这条主线。\n\n` +
-      '建议回左侧挑 2~3 节重讲一遍做巩固 —— 第二遍听，注意力会落在第一遍没接上的那几处链条上。');
+      '建议回左侧挑 2~3 节重讲一遍做巩固。第二遍听的时候，注意力会落在第一遍没接上的那几处链条上。');
     return;
   }
   FX.confetti();
